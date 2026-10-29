@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pharmacy Inventory Management System</title>
+  <style>
+    :root { --blue:#1769aa; --light:#f3f7fb; --ink:#203040; --muted:#64748b; --border:#dce5ee; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Arial, sans-serif; background:var(--light); color:var(--ink); }
+    header { background:var(--blue); color:white; padding:22px 5%; }
+    header h1 { margin:0 0 6px; font-size:25px; }
+    header p { margin:0; opacity:.9; font-size:14px; }
+    main { max-width:1100px; margin:24px auto; padding:0 18px 32px; }
+    .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:20px; }
+    .stat, .panel { background:white; border:1px solid var(--border); border-radius:10px; padding:18px; box-shadow:0 2px 7px #18324a0a; }
+    .stat span { color:var(--muted); font-size:13px; }
+    .stat strong { display:block; font-size:27px; margin-top:8px; }
+    .panel h2 { margin:0 0 16px; font-size:19px; }
+    .form-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+    label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
+    input { width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font:inherit; }
+    button { border:0; border-radius:6px; padding:10px 14px; cursor:pointer; font-weight:600; }
+    .primary { background:var(--blue); color:white; }
+    .secondary { background:#e8eef5; color:var(--ink); }
+    .danger { background:#fee2e2; color:#991b1b; padding:7px 9px; }
+    .form-actions { margin-top:14px; display:flex; gap:8px; }
+    .toolbar { display:flex; justify-content:space-between; gap:12px; align-items:center; margin:22px 0 12px; }
+    .toolbar input { max-width:320px; background:white; }
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; min-width:700px; }
+    th, td { padding:12px 10px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
+    th { background:#f8fafc; color:#475569; }
+    .badge { display:inline-block; padding:4px 8px; border-radius:20px; font-size:12px; background:#dcfce7; color:#166534; }
+    .low { background:#fef3c7; color:#92400e; }
+    .expired { background:#fee2e2; color:#991b1b; }
+    .empty { text-align:center; color:var(--muted); padding:24px; }
+    footer { text-align:center; color:var(--muted); font-size:12px; padding:18px; }
+    @media(max-width:700px) { .stats { grid-template-columns:1fr; } .form-grid { grid-template-columns:1fr 1fr; } header h1 { font-size:21px; } }
+    @media(max-width:460px) { .form-grid { grid-template-columns:1fr; } .toolbar { align-items:stretch; flex-direction:column; } .toolbar input { max-width:none; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>💊 Pharmacy Inventory Management System</h1>
+    <p>Simple mini project for Software Engineering</p>
+  </header>
+  <main>
+    <section class="stats" aria-label="Inventory summary">
+      <div class="stat"><span>Medicine Types</span><strong id="totalTypes">0</strong></div>
+      <div class="stat"><span>Total Units in Stock</span><strong id="totalUnits">0</strong></div>
+      <div class="stat"><span>Low Stock Items</span><strong id="lowStock">0</strong></div>
+    </section>
+
+    <section class="panel">
+      <h2 id="formTitle">Add Medicine</h2>
+      <form id="medicineForm">
+        <input type="hidden" id="medicineId">
+        <div class="form-grid">
+          <div><label for="name">Medicine Name *</label><input id="name" required placeholder="e.g. Paracetamol"></div>
+          <div><label for="category">Category</label><input id="category" placeholder="e.g. Tablet"></div>
+          <div><label for="quantity">Quantity *</label><input id="quantity" type="number" min="0" required placeholder="e.g. 50"></div>
+          <div><label for="price">Price per Unit (₹) *</label><input id="price" type="number" min="0" step="0.01" required placeholder="e.g. 5.00"></div>
+          <div><label for="expiry">Expiry Date *</label><input id="expiry" type="date" required></div>
+          <div><label for="supplier">Supplier</label><input id="supplier" placeholder="e.g. ABC Pharma"></div>
+        </div>
+        <div class="form-actions">
+          <button class="primary" type="submit" id="saveBtn">Add Medicine</button>
+          <button class="secondary" type="button" id="cancelBtn" hidden>Cancel Edit</button>
+        </div>
+      </form>
+    </section>
+
+    <div class="toolbar">
+      <h2 style="margin:0;font-size:19px">Medicine Inventory</h2>
+      <input id="search" type="search" placeholder="Search medicines..." aria-label="Search medicines">
+    </div>
+    <section class="panel table-wrap">
+      <table>
+        <thead><tr><th>Medicine</th><th>Category</th><th>Quantity</th><th>Price</th><th>Expiry Date</th><th>Supplier</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="medicineRows"></tbody>
+      </table>
+      <div id="emptyState" class="empty" hidden>No medicines found. Add a medicine using the form above.</div>
+    </section>
+  </main>
+  <footer>Pharmacy Inventory Management System · Software Engineering Mini Project</footer>
+
+  <script>
+    const STORAGE_KEY = "pharmacyInventoryMiniProject";
+    const $ = (id) => document.getElementById(id);
+    let medicines = [];
+    try { medicines = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); } catch { medicines = []; }
+
+    function saveData() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(medicines));
+    }
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, ch => ({
+        "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+      })[ch]);
+    }
+    function statusFor(m) {
+      const today = new Date(); today.setHours(0,0,0,0);
+      const expiry = new Date(m.expiry + "T00:00:00");
+      if (expiry < today) return ["Expired", "expired"];
+      if (Number(m.quantity) <= 10) return ["Low Stock", "low"];
+      return ["In Stock", ""];
+    }
+    function render() {
+      const query = $("search").value.trim().toLowerCase();
+      const filtered = medicines.filter(m =>
+        [m.name, m.category, m.supplier].some(v => String(v || "").toLowerCase().includes(query))
+      );
+      $("totalTypes").textContent = medicines.length;
+      $("totalUnits").textContent = medicines.reduce((sum, m) => sum + Number(m.quantity), 0);
+      $("lowStock").textContent = medicines.filter(m => Number(m.quantity) <= 10).length;
+      $("medicineRows").innerHTML = filtered.map(m => {
+        const [status, cls] = statusFor(m);
+        return `<tr>
+          <td>${escapeHtml(m.name)}</td><td>${escapeHtml(m.category || "-")}</td>
+          <td>${Number(m.quantity)}</td><td>₹${Number(m.price).toFixed(2)}</td>
+          <td>${escapeHtml(m.expiry)}</td><td>${escapeHtml(m.supplier || "-")}</td>
+          <td><span class="badge ${cls}">${status}</span></td>
+          <td><button class="secondary" onclick="editMedicine('${m.id}')">Edit</button>
+          <button class="danger" onclick="deleteMedicine('${m.id}')">Delete</button></td>
+        </tr>`;
+      }).join("");
+      $("emptyState").hidden = filtered.length !== 0;
+    }
+    $("medicineForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const id = $("medicineId").value;
+      const medicine = {
+        id: id || String(Date.now()),
+        name: $("name").value.trim(),
+        category: $("category").value.trim(),
+        quantity: Number($("quantity").value),
+        price: Number($("price").value),
+        expiry: $("expiry").value,
+        supplier: $("supplier").value.trim()
+      };
+      if (!medicine.name || !medicine.expiry || medicine.quantity < 0 || medicine.price < 0) {
+        alert("Please enter valid medicine details."); return;
+      }
+      if (id) medicines = medicines.map(m => m.id === id ? medicine : m);
+      else medicines.push(medicine);
+      saveData(); resetForm(); render();
+    });
+    function editMedicine(id) {
+      const m = medicines.find(item => item.id === id);
+      if (!m) return;
+      $("medicineId").value = m.id;
+      $("name").value = m.name; $("category").value = m.category;
+      $("quantity").value = m.quantity; $("price").value = m.price;
+      $("expiry").value = m.expiry; $("supplier").value = m.supplier;
+      $("formTitle").textContent = "Edit Medicine";
+      $("saveBtn").textContent = "Save Changes"; $("cancelBtn").hidden = false;
+      window.scrollTo({top:0, behavior:"smooth"});
+    }
+    function deleteMedicine(id) {
+      const m = medicines.find(item => item.id === id);
+      if (m && confirm(`Delete ${m.name} from inventory?`)) {
+        medicines = medicines.filter(item => item.id !== id);
+        saveData(); render();
+        if ($("medicineId").value === id) resetForm();
+      }
+    }
+    function resetForm() {
+      $("medicineForm").reset(); $("medicineId").value = "";
+      $("formTitle").textContent = "Add Medicine";
+      $("saveBtn").textContent = "Add Medicine"; $("cancelBtn").hidden = true;
+    }
+    $("cancelBtn").addEventListener("click", resetForm);
+    $("search").addEventListener("input", render);
+
+    // Add a few sample records on first launch so the demo is easy to understand.
+    if (!localStorage.getItem(STORAGE_KEY)) {
+      medicines = [
+        {id:"sample1", name:"Paracetamol", category:"Tablet", quantity:50, price:2.50, expiry:"2027-12-31", supplier:"ABC Pharma"},
+        {id:"sample2", name:"Vitamin C", category:"Tablet", quantity:8, price:4.00, expiry:"2027-06-30", supplier:"HealthCare Ltd."},
+        {id:"sample3", name:"Cough Syrup", category:"Syrup", quantity:20, price:85.00, expiry:"2026-12-15", supplier:"MediSupply"}
+      ];
+      saveData();
+    }
+    render();
+  </script>
+</body>
+</html>
